@@ -19,10 +19,44 @@ localparam mem_vol = 2**AWIDTH;
 
 logic [AWIDTH-1:0] wr_adr;
 logic [AWIDTH-1:0] rd_adr;
-logic [AWIDTH-1:0] mem_counter;
 logic [DWIDTH-1:0] mem [mem_vol:0];
 logic [DWIDTH-1:0] q_buf;
-logic              inc_flag, dec_flag;
+logic              wr_ena, rd_ena, q_ena;
+logic              empty_fsm, full_fsm;
+
+// port mapping
+generate
+  if ( SHOWAHEAD == "ON" )
+  b1_scfifo_fsm_sa #( AWIDTH ) b1_scfifo_fsm_core
+(
+  .clk_i   ( clk_i ),
+  .srst_i  ( srst_i ),
+  .rdreq_i ( rdreq_i ),
+  .wrreq_i ( wrreq_i ),
+  .wr_ena  ( wr_ena ),
+  .rd_ena  ( rd_ena ),
+  .q_ena   ( q_ena ),
+    
+  .empty_fsm ( empty_fsm ),
+  .full_fsm  ( full_fsm ),
+  .usedw_o   ( usedw_o )
+);
+  else
+    b1_scfifo_fsm_norm #( AWIDTH ) b1_scfifo_fsm_core
+(
+  .clk_i   ( clk_i ),
+  .srst_i  ( srst_i ),
+  .rdreq_i ( rdreq_i ),
+  .wrreq_i ( wrreq_i ),
+  .wr_ena  ( wr_ena ),
+  .rd_ena  ( rd_ena ),
+  .q_ena   ( q_ena ),
+    
+  .empty_fsm ( empty_fsm ),
+  .full_fsm  ( full_fsm ),
+  .usedw_o   ( usedw_o )
+);
+endgenerate
 
 generate
   if ( SHOWAHEAD == "OFF" )
@@ -32,60 +66,52 @@ generate
           begin
             wr_adr      <= 0;
             rd_adr      <= 0;
-            mem_counter <= 0;
           end
         else
           begin
-            if ( ( wrreq_i ) && ( !full_o ) )  wr_adr <= wr_adr + 1;
-            if ( (rdreq_i)   && ( !empty_o ) ) rd_adr <= rd_adr + 1;
-
-            if ( inc_flag ) mem_counter <= mem_counter + 1;
-            if ( dec_flag ) mem_counter <= mem_counter - 1;
-
-            if ( ( wrreq_i ) && ( !full_o ) )  mem[wr_adr] <= data_i;
-            if ( ( rdreq_i ) && ( !empty_o ) ) q_o         <= mem[rd_adr];
- 
+            if ( ( wrreq_i ) && ( wr_ena ) ) 
+              begin
+                mem[wr_adr] <= data_i;
+                wr_adr      <= wr_adr + 1;
+              end
+              
+            if ( (rdreq_i) && ( rd_ena ) ) 
+              begin
+                q_o     <= mem[rd_adr];
+                rd_adr  <= rd_adr + 1;
+              end
           end
 
-      assign empty_o  = ( mem_counter == 0 );
-      assign full_o   = ( mem_counter == ( mem_vol - 1 ) );
-      assign usedw_o  = ( empty_o ) ? 0 : mem_counter;
-      assign inc_flag = ( wrreq_i && ( !full_o ) )  && ( ( !rdreq_i ) || ( rdreq_i && empty_o ) );
-      assign dec_flag = ( rdreq_i && ( !empty_o ) ) && ( ( !wrreq_i ) || ( wrreq_i && full_o  ) );
-
+      assign full_o  = full_fsm;
+      assign empty_o = empty_fsm;
+      assign usedw_o = ( wr_adr >= rd_adr ) ? ( wr_adr - rd_adr ) : ( mem_vol + wr_adr - rd_adr);
     end
   else 
     begin
-      always_ff @( posedge clk_i )
+     always_ff @( posedge clk_i )
         if ( srst_i ) 
           begin
             wr_adr  <= 0;
             rd_adr  <= 0;
-            empty_o <= 1;
           end
         else
           begin
-            if  ( wrreq_i ) 
+            if  ( ( wrreq_i ) && ( wr_ena ) )
               begin
                 wr_adr      <= wr_adr + 1;
                 mem[wr_adr] <= data_i;
               end
 
-            if ( rdreq_i ) rd_adr <= rd_adr + 1;
-
-            if ( ( ( usedw_o == 1) && ( !rdreq_i ) ) || ( usedw_o>1 ) ) empty_o <= 0;
-
-            if ( ( ( usedw_o ==1 ) && rdreq_i ) || (usedw_o == 0 ) )    empty_o <= 1;
-
-            if ( !empty_o ) q_buf <= mem[rd_adr];
-
+            if ( ( rdreq_i ) && ( rd_ena ) ) rd_adr <= rd_adr + 1;
+            if ( !empty_fsm ) q_buf <= mem[rd_adr];
           end
- 
-      assign q_o     = ( ( usedw_o == 0 ) || (empty_o ) ) ? q_buf : mem[rd_adr];
-      assign full_o  = ( usedw_o == ( mem_vol - 1 ) );
+  
+      assign q_o     = ( ( usedw_o == 0 ) || (empty_fsm ) ) ? q_buf : mem[rd_adr];
       assign usedw_o = ( wr_adr >= rd_adr ) ? ( wr_adr - rd_adr ) : ( mem_vol + wr_adr - rd_adr);
+      assign full_o  = full_fsm;
+      assign empty_o = empty_fsm;
 
-    end
+	  end
 
 endgenerate
 
