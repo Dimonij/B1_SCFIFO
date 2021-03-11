@@ -32,7 +32,7 @@ enum int unsigned { ZERO_ST=0, NORM_ST=1, FULL_ST=2} state, nextstate;
         NORM_ST: if ( ( usedw_o == 1 ) && ( rdreq_i ) && ( !wrreq_i ) )  
                                 nextstate = ZERO_ST;
                   else 
-                    if ( usedw_o == ( mem_vol - 1 ) ) && ( wrreq_i ) && ( !rdreq_i ) ) 
+		   if ( ( usedw_o == ( mem_vol - 1 ) ) && ( wrreq_i ) && ( !rdreq_i ) ) 
                                 nextstate = FULL_ST;
                      else       nextstate = NORM_ST;
 
