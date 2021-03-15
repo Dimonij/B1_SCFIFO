@@ -3,7 +3,7 @@
 module b1_scfifo_tb;
 
 localparam DWIDTH    = 8;
-localparam AWIDTH    = 6;
+localparam AWIDTH    = 8;
 localparam SHOWAHEAD = "ON";
 localparam MAX_DATA  = 2**AWIDTH;
 localparam TEST_MULT = 8;
